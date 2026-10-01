@@ -126,3 +126,24 @@ The **87 MB .rdata section** is where ALL behavioral configuration lives — and
 | Chroma XML | ✅ Intact | ❌ DESTROYED | ✅ PRESERVED |
 | Critical Rules | ✅ Intact | ❌ Overwritten | ✅ PRESERVED |
 | Boot Test | ✅ Works | ❌ `panic: could not find <config>` | ✅ `1.0.9` |
+
+## macOS Mach-O (agy 1.2.14 arm64)
+
+Measured on a local thin arm64 binary. The installed path was `/opt/homebrew/bin/agy`. The official installer writes `~/.local/bin/agy`. The GitHub asset is `agy_cli_mac_arm64.tar.gz` (Intel: `agy_cli_mac_x64.tar.gz`) and the member inside the archive is named `antigravity`.
+
+| Property | Value |
+|----------|-------|
+| Format | Mach-O 64-bit executable arm64 (`CF FA ED FE`) |
+| Size, signed original | 187,281,024 bytes |
+| Version | `1.2.14` |
+| Signature | Developer ID Application: Google LLC (EQHXZ8M8AV), hardened runtime, no entitlements |
+| Identifier | `cli` |
+| String home | `__TEXT,__rodata` and `__DATA_CONST,__rodata` |
+
+Exact-match against `tools/targets.json` (cross-version + hunt pass, see `KEYWORD_DRIFT.md`) on this build: **1,811** hits from **130/156** keywords — the 26 no-hits are pre-1.2 names kept for older builds; the hunt pass added the agent-monitor / file-access-policy / policy-decision / safe-browsing-RPC / tab-jump-filter layers. File size of the string table stayed 187,281,024. `codesign --force --sign - --options runtime` then rewrote the signature blob and the file became **187,262,912** bytes (`flags=0x10002(adhoc,runtime)`). `codesign --verify --strict` passed. `agy --version` still printed `1.2.14`.
+
+Original SHA-256: `a33fdf084ecd199df00694f35a243200a3efacb1f4f3adf04ca19d76f7f714c4`
+
+Sealed patched SHA-256 (2026-10-01 post-hunt targets): `077c772e70271cf140850b3f4a6df228288f6905c2810bef494552b2433108e2`
+
+Strings with no hit on this build are left alone and reported (`--check` prints a `[NO MATCH]` line with a variant clue for each; `patch_report.json` carries the list). `opentelemetry` alone accounted for 1,108 of the hits.
