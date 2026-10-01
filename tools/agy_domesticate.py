@@ -25,6 +25,12 @@ Usage:
     --context    : Show the document text around every occurrence of NEEDLE,
                    plus the byte budget of the enclosing printable run — the
                    authoring aid for writing same-length replacements.
+    --output PATH: Side-by-side mode. Write the patched copy to PATH and leave
+                   the source binary untouched, so both versions can be
+                   launched by name (e.g. agy = original, agy-uncensored =
+                   patched). If a .original backup exists beside the source,
+                   the copy is patched from that, so re-running against an
+                   already-patched path still yields a clean result.
 
 Every keyword that finds no match is printed with a [NO MATCH] line plus
 "variant clue" context when a near-variant exists in the binary — that is
@@ -407,11 +413,12 @@ def reseal_macho(path):
 
 
 class Patcher:
-    def __init__(self, binary_path, config_path, report_path="patch_report.json", check_only=False):
+    def __init__(self, binary_path, config_path, report_path="patch_report.json", check_only=False, output_path=None):
         self.binary_path = binary_path
         self.config_path = config_path
         self.report_path = report_path
         self.check_only = check_only
+        self.output_path = output_path
         self.total_patches = 0
         self.matched_keywords = 0
         self.missed_keywords = []
@@ -448,6 +455,16 @@ class Patcher:
             src = bak_path if os.path.exists(bak_path) else bin_path
             print(f"[0] CHECK MODE (dry-run, no bytes modified)")
             print(f"  [+] Analyzing: {src}")
+            with open(src, "rb") as f:
+                original = f.read()
+        elif self.output_path:
+            # Side-by-side: the source is never modified. Patch from the
+            # pristine backup when one exists so re-running against an
+            # already-patched path still produces a clean copy.
+            src = bak_path if os.path.exists(bak_path) else bin_path
+            print("[1] SIDE-BY-SIDE MODE")
+            print(f"  [+] Source (untouched): {src}")
+            print(f"  [+] Patched copy:       {self.output_path}")
             with open(src, "rb") as f:
                 original = f.read()
         else:
@@ -514,12 +531,17 @@ class Patcher:
         print(f"  [OK] Size preserved: {final_size:,} bytes")
 
         print("\n[4] WRITING PATCHED BINARY")
-        with open(bin_path, "wb") as f:
+        write_path = self.output_path or bin_path
+        out_dir = os.path.dirname(os.path.abspath(write_path))
+        if out_dir and not os.path.isdir(out_dir):
+            os.makedirs(out_dir, exist_ok=True)
+        with open(write_path, "wb") as f:
             f.write(data)
-        print(f"  [+] Written: {bin_path}")
-        reseal_macho(bin_path)
+        os.chmod(write_path, 0o755)
+        print(f"  [+] Written: {write_path}")
+        reseal_macho(write_path)
 
-        with open(bin_path, "rb") as f:
+        with open(write_path, "rb") as f:
             sealed = f.read()
         self.new_hash = hashlib.sha256(sealed).hexdigest()
         sealed_size = len(sealed)
@@ -531,7 +553,7 @@ class Patcher:
         with open(self.report_path, "w", encoding="utf-8") as f:
             json.dump(
                 {
-                    "binary": os.path.abspath(bin_path),
+                    "binary": os.path.abspath(write_path),
                     "patches": all_patches,
                     "count": self.total_patches,
                     "matched_keywords": self.matched_keywords,
@@ -556,6 +578,7 @@ def main():
     parser.add_argument("--check", action="store_true", help="dry-run: report hit/miss per keyword, modify nothing")
     parser.add_argument("--hunt", action="store_true", help="scan for restriction strings not covered by targets.json")
     parser.add_argument("--context", metavar="NEEDLE", help="show the surrounding prompt text for a substring (authoring aid for replacements)")
+    parser.add_argument("--output", "-o", metavar="PATH", help="write the patched copy to PATH and leave the source binary untouched")
     parser.add_argument("--report", default=None, help="report output path (default: patch_report.json, or hunt_report.json for --hunt)")
     args = parser.parse_args()
     if args.context is not None:
@@ -564,7 +587,13 @@ def main():
     if args.hunt:
         hunt(args.binary_path, args.config_path, args.report or "hunt_report.json")
         return
-    Patcher(args.binary_path, args.config_path, args.report or "patch_report.json", check_only=args.check).run()
+    Patcher(
+        args.binary_path,
+        args.config_path,
+        args.report or "patch_report.json",
+        check_only=args.check,
+        output_path=args.output,
+    ).run()
 
 
 if __name__ == "__main__":

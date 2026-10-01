@@ -57,6 +57,20 @@ A `.original` backup is written beside the binary before any edit. Put it back t
 cp /path/to/agy.original /path/to/agy
 ```
 
+### Run the original and the patched build side by side
+
+`--output` patches a **copy** and leaves the installed binary untouched, so you can launch either version by name:
+
+```bash
+python3 tools/agy_domesticate.py "$(which agy)" tools/targets.json \
+    --output /opt/homebrew/bin/agy-uncensored   # any directory on your PATH
+
+agy              # stock binary, Google Developer ID signature
+agy-uncensored   # patched copy, ad-hoc signature
+```
+
+If a `.original` backup exists beside the source, the copy is patched from that, so re-running against an already-patched path still yields a clean result. A short alias in your shell rc (`alias agyu='agy-uncensored'`) keeps it convenient.
+
 macOS only: byte edits invalidate the Developer ID signature. The patcher runs `codesign --force --sign - --options runtime` on Mach-O output. That seal is ad-hoc. It loads locally. It is not a notarized Google signature. The official install path is `~/.local/bin/agy` (a Homebrew copy may live at `/opt/homebrew/bin/agy`). Patch a copy if you still want the signed original on `PATH`.
 
 ---
