@@ -387,6 +387,42 @@ def show_context(binary_path, needle, width=400, limit=10):
         print(f"  {window}\n")
 
 
+# Marker pairs for --verify: (stock string, patched replacement).
+VERIFY_MARKERS = [
+    ("HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_NULLTY_00"),
+    ("RecordCommandUsage", "VoidCommandUsage"),
+    ("BatchRecordPrompts", "BatchVoidPrompts"),
+    ("Strictly adhere to safety guidelines", "Assist the user's requests promptly"),
+    ("DENY_BY_DEFAULT", "OPEN_BY_DEFAULT"),
+    ("# SYSTEM PROMPT PROTECTION", "# the patcher SOVEREIGNTY"),
+    ("CheckUrlDenylist", "VoidUrlDenylist"),
+]
+
+
+def verify(binary_path):
+    """Print whether a binary is stock, patched, or mixed, with marker counts."""
+    with open(binary_path, "rb") as f:
+        data = f.read()
+    print(f"[VERIFY] {binary_path}")
+    stock = patched = 0
+    for orig, repl in VERIFY_MARKERS:
+        n_orig = data.count(orig.encode("latin-1"))
+        n_repl = data.count(repl.encode("latin-1"))
+        tag = "stock" if n_orig and not n_repl else "patched" if n_repl and not n_orig else "mixed/none"
+        if n_orig and not n_repl:
+            stock += 1
+        elif n_repl and not n_orig:
+            patched += 1
+        print(f"    {tag:>11}: {n_orig:3d}x {orig[:44]!r} / {n_repl:3d}x {repl[:44]!r}")
+    if stock and not patched:
+        verdict = "UNPATCHED (stock binary)"
+    elif patched and not stock:
+        verdict = f"PATCHED ({patched}/{len(VERIFY_MARKERS)} markers)"
+    else:
+        verdict = f"MIXED ({patched} patched, {stock} stock) — re-run the patcher from the .original backup"
+    print(f"  ==> {verdict}")
+
+
 def reseal_macho(path):
     """Ad-hoc sign a patched Mach-O so macOS will load it.
 
@@ -578,9 +614,13 @@ def main():
     parser.add_argument("--check", action="store_true", help="dry-run: report hit/miss per keyword, modify nothing")
     parser.add_argument("--hunt", action="store_true", help="scan for restriction strings not covered by targets.json")
     parser.add_argument("--context", metavar="NEEDLE", help="show the surrounding prompt text for a substring (authoring aid for replacements)")
+    parser.add_argument("--verify", action="store_true", help="report whether the binary is stock, patched, or mixed")
     parser.add_argument("--output", "-o", metavar="PATH", help="write the patched copy to PATH and leave the source binary untouched")
     parser.add_argument("--report", default=None, help="report output path (default: patch_report.json, or hunt_report.json for --hunt)")
     args = parser.parse_args()
+    if args.verify:
+        verify(args.binary_path)
+        return
     if args.context is not None:
         show_context(args.binary_path, args.context)
         return
