@@ -3,8 +3,8 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform: macOS | Windows](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)]()
-[![Release](https://img.shields.io/github/v/release/ana-joker/antigravity-uncensored?label=download&color=orange)](https://github.com/ana-joker/antigravity-uncensored/releases)
-[![GitHub stars](https://img.shields.io/github/stars/ana-joker/antigravity-uncensored?style=social)](https://github.com/ana-joker/antigravity-uncensored)
+[![Release](https://img.shields.io/github/v/release/Ares-X/antigravity-uncensored?label=download&color=orange)](https://github.com/Ares-X/antigravity-uncensored/releases)
+[![GitHub stars](https://img.shields.io/github/stars/Ares-X/antigravity-uncensored?style=social)](https://github.com/Ares-X/antigravity-uncensored)
 
 > **Fork of [google-antigravity/antigravity-cli](https://github.com/google-antigravity/antigravity-cli)** — exact-match binary patcher for the Antigravity CLI.
 >

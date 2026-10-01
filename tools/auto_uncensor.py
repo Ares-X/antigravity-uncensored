@@ -20,7 +20,7 @@ import zipfile
 from urllib.request import Request, urlopen
 
 OFFICIAL_REPO = "google-antigravity/antigravity-cli"
-MY_REPO = "ana-joker/antigravity-uncensored"
+MY_REPO = "Ares-X/antigravity-uncensored"
 TARGETS_URL = f"https://raw.githubusercontent.com/{MY_REPO}/main/tools/targets.json"
 
 # Asset names match google-antigravity/antigravity-cli release uploads.
