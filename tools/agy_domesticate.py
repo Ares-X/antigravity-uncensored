@@ -97,7 +97,50 @@ def telemetry_replacement(orig):
 
 
 def analytics_replacement(orig):
-    return "void.local"
+    """An unresolvable host that fits the original's byte budget.
+
+    void.local for normal domains; shorter non-resolving hosts for short
+    originals (sentry.io, datadog) so nothing is ever truncated. Never an
+    IP literal — 0.0.0.0 would route to localhost on some stacks.
+    """
+    n = len(orig)
+    if n >= 10:
+        return "void.local"
+    if n == 9:
+        return "void.none"
+    return "no.host"
+
+
+def validate_targets(cfg):
+    """Fail fast on explicit replacement pairs that cannot fit.
+
+    Same-length patching cannot grow a string: Go string headers carry an
+    explicit length, protobuf descriptors are length-prefixed, and rodata
+    strings are packed back-to-back. An over-length replacement is silently
+    truncated at patch time (historically mid-word), so refuse to run until
+    the config is fixed. Rule-derived sections (telemetry/analytics) are
+    excluded: their replacements are computed, and truncation there is by
+    design (e.g. void.local against a shorter domain).
+    """
+    violations = []
+    for section_key, _title, _ptype in SECTION_DEFS:
+        if section_key in ("telemetry_functions", "analytics_endpoints"):
+            continue
+        section = cfg.get(section_key)
+        if not section:
+            continue
+        if isinstance(section, dict):
+            pairs = list(section.items())
+        else:
+            pairs = [
+                (item[0], item[1]) for item in section if isinstance(item, (list, tuple))
+            ]
+        for orig, repl in pairs:
+            if len(repl.encode("latin-1", errors="replace")) > len(
+                orig.encode("latin-1", errors="replace")
+            ):
+                violations.append((section_key, orig, repl))
+    return violations
 
 
 def iter_targets(section, rule=None):
@@ -387,6 +430,19 @@ class Patcher:
 
         with open(self.config_path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
+
+        violations = validate_targets(cfg)
+        if violations:
+            print(
+                f"[!] {len(violations)} replacement(s) exceed their original's length — "
+                "same-length patching cannot grow a string:"
+            )
+            for section_key, orig, repl in violations:
+                print(
+                    f"    [{section_key}] {orig!r} ({len(orig)}B) -> {repl!r} ({len(repl)}B)"
+                    f" — shorten the replacement to at most {len(orig)} bytes"
+                )
+            sys.exit(1)
 
         if self.check_only:
             src = bak_path if os.path.exists(bak_path) else bin_path
