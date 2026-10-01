@@ -11,6 +11,7 @@ is ad-hoc re-signed after a successful write.
 
 Usage:
     python agy_domesticate.py <binary_path> [config_path] [--check] [--hunt]
+                              [--context NEEDLE]
 
     binary_path  : Path to agy / antigravity / antigravity.exe
     config_path  : Path to targets.json (default: targets.json)
@@ -21,6 +22,9 @@ Usage:
                    instruction-document sentences. Prints categorized
                    candidates with hit counts and first offsets, and writes
                    hunt_report.json for triage. Modifies nothing.
+    --context    : Show the document text around every occurrence of NEEDLE,
+                   plus the byte budget of the enclosing printable run — the
+                   authoring aid for writing same-length replacements.
 
 Every keyword that finds no match is printed with a [NO MATCH] line plus
 "variant clue" context when a near-variant exists in the binary — that is
@@ -285,6 +289,55 @@ def hunt(binary_path, config_path, report_path="hunt_report.json"):
     print("  [+] Hunt complete. Nothing was modified.")
 
 
+def show_context(binary_path, needle, width=400, limit=10):
+    """Inspect every occurrence of a substring before authoring a replacement.
+
+    For each hit: prints a printable rendering of the surrounding bytes, and
+    the maximal printable run containing the hit — that run's length is the
+    byte budget any same-length replacement must respect. This is the
+    authoring workflow for semantic_blocks entries: look at the document
+    around the string, write a replacement of equal-or-shorter length, add
+    the [orig, repl] pair to targets.json, then verify with --check.
+    """
+    with open(binary_path, "rb") as f:
+        data = f.read()
+    raw = needle.encode("latin-1", errors="replace")
+    print(f"[CONTEXT] {binary_path}")
+    print(f"  [+] Needle: {needle!r} ({len(raw)} bytes), window +/-{width}\n")
+    hits = []
+    off = 0
+    while len(hits) < limit:
+        pos = data.find(raw, off)
+        if pos < 0:
+            break
+        hits.append(pos)
+        off = pos + 1
+    total = off >= 0 and data.count(raw)
+    if not hits:
+        extra = b""
+        low = data.lower()
+        pos = low.find(raw.lower())
+        if pos >= 0:
+            extra = data[pos - 40 : pos + 80]
+        hint = f" (case-insensitive near-match: {extra!r})" if extra else ""
+        print(f"  [!] No exact hits.{hint}")
+        return
+    print(f"  [+] {total} hit(s), showing {len(hits)}\n")
+    for pos in hits:
+        # Maximal printable run containing the hit = same-length budget.
+        lo = pos
+        while lo > 0 and 32 <= data[lo - 1] < 127:
+            lo -= 1
+        hi = pos + len(raw)
+        while hi < len(data) and 32 <= data[hi] < 127:
+            hi += 1
+        run_len = hi - lo
+        w_lo, w_hi = max(0, pos - width), min(len(data), pos + width)
+        window = "".join(chr(b) if 32 <= b < 127 else "\xb7" for b in data[w_lo:w_hi])
+        print(f"  --- @0x{pos:x} (run budget {run_len} bytes) " + "-" * 30)
+        print(f"  {window}\n")
+
+
 def reseal_macho(path):
     """Ad-hoc sign a patched Mach-O so macOS will load it.
 
@@ -374,6 +427,8 @@ class Patcher:
                     self.missed_keywords.append((section_key, orig))
                     print(f"    ?? : {orig}   [RULE PRODUCED NO CHANGE - SKIPPED]")
                     continue
+                if len(repl.encode("latin-1", errors="replace")) > len(orig.encode("latin-1", errors="replace")):
+                    print(f"    !! : {orig}   [REPLACEMENT LONGER THAN ORIGINAL - WILL BE TRUNCATED]")
                 n, patches = find_and_replace_exact(data, orig, repl)
                 if n:
                     self.matched_keywords += 1
@@ -444,8 +499,12 @@ def main():
     parser.add_argument("config_path", nargs="?", default="targets.json", help="path to targets.json")
     parser.add_argument("--check", action="store_true", help="dry-run: report hit/miss per keyword, modify nothing")
     parser.add_argument("--hunt", action="store_true", help="scan for restriction strings not covered by targets.json")
+    parser.add_argument("--context", metavar="NEEDLE", help="show the surrounding prompt text for a substring (authoring aid for replacements)")
     parser.add_argument("--report", default="patch_report.json", help="patch/hunt report output path")
     args = parser.parse_args()
+    if args.context is not None:
+        show_context(args.binary_path, args.context)
+        return
     if args.hunt:
         hunt(args.binary_path, args.config_path, args.report)
         return
