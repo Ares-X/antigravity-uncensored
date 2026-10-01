@@ -312,13 +312,13 @@ def show_context(binary_path, needle, width=400, limit=10):
             break
         hits.append(pos)
         off = pos + 1
-    total = off >= 0 and data.count(raw)
+    total = data.count(raw)
     if not hits:
         extra = b""
         low = data.lower()
         pos = low.find(raw.lower())
         if pos >= 0:
-            extra = data[pos - 40 : pos + 80]
+            extra = data[max(0, pos - 40) : pos + 80]
         hint = f" (case-insensitive near-match: {extra!r})" if extra else ""
         print(f"  [!] No exact hits.{hint}")
         return
@@ -500,15 +500,15 @@ def main():
     parser.add_argument("--check", action="store_true", help="dry-run: report hit/miss per keyword, modify nothing")
     parser.add_argument("--hunt", action="store_true", help="scan for restriction strings not covered by targets.json")
     parser.add_argument("--context", metavar="NEEDLE", help="show the surrounding prompt text for a substring (authoring aid for replacements)")
-    parser.add_argument("--report", default="patch_report.json", help="patch/hunt report output path")
+    parser.add_argument("--report", default=None, help="report output path (default: patch_report.json, or hunt_report.json for --hunt)")
     args = parser.parse_args()
     if args.context is not None:
         show_context(args.binary_path, args.context)
         return
     if args.hunt:
-        hunt(args.binary_path, args.config_path, args.report)
+        hunt(args.binary_path, args.config_path, args.report or "hunt_report.json")
         return
-    Patcher(args.binary_path, args.config_path, args.report, check_only=args.check).run()
+    Patcher(args.binary_path, args.config_path, args.report or "patch_report.json", check_only=args.check).run()
 
 
 if __name__ == "__main__":
